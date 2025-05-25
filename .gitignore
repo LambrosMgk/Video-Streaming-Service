@@ -1,3 +1,4 @@
+# Maven specific
 target/
 pom.xml.tag
 pom.xml.releaseBackup
@@ -7,14 +8,17 @@ release.properties
 dependency-reduced-pom.xml
 buildNumber.properties
 .mvn/timing.properties
-# https://github.com/takari/maven-wrapper#usage-without-binary-jar
 .mvn/wrapper/maven-wrapper.jar
 
-# Eclipse m2e generated files
-# Eclipse Core
+# Eclipse files
 .project
-# JDT-specific (Eclipse Java Development Tools)
 .classpath
-
 .settings/
 bin/
+
+# Ignore everything in specific folders
+resources/Downloads/
+resources/ffmpeg/
+
+# Ignore all files that start with "stream_" and end with ".sdp" in resources/
+resources/stream_*.sdp
