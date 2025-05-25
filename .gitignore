@@ -16,9 +16,15 @@ buildNumber.properties
 .settings/
 bin/
 
-# Ignore everything in specific folders
-resources/Downloads/
-resources/ffmpeg/
+# Keep folders but ignore contents
+src/Videos/*
+!src/Videos/.gitkeep
 
-# Ignore all files that start with "stream_" and end with ".sdp" in resources/
+resources/Downloads/*
+!resources/Downloads/.gitkeep
+
+resources/ffmpeg/*
+!resources/ffmpeg/.gitkeep
+
+# Ignore stream_*.sdp files
 resources/stream_*.sdp
