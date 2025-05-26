@@ -11,9 +11,9 @@ How to run:
   
 
 Notes:
-- You must download ffmpeg and place it the "resources/ffmpeg" directory so that the executables can be accessed from within the project, e.g. "resources/ffmpeg/bin/ffmpeg.exe"
+- You must download [ffmpeg](https://www.ffmpeg.org/download.html) (unzip it) and place it the "resources/ffmpeg" directory so that the executables can be accessed from within the project, e.g. "resources/ffmpeg/bin/ffmpeg.exe"
 
-- The client does a download speed test and sends information about the speed to the server. To do that it uses the JSpeedTest library and downloads from one of their servers, if this function doesn't work check their github page for a fresh list of servers and change the URL.
+- The client does a download speed test and sends information about the speed to the server. To do that it uses the [JSpeedTest](https://github.com/bertrandmartel/speed-test-lib/tree/master) library and downloads from one of their servers, if this function doesn't work check their github page for a fresh list of servers and change the URL.
 
 - This project was developed in the Eclipse IDE, some of the components i installed are:
   m2e-wtp - JAX-RS configurator for WTP (Optional)
