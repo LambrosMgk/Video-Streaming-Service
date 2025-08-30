@@ -16,10 +16,12 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
+
 import shared.FFmpegLoader;
 
-import frontend.ChooseVideoFormat;
-import frontend.ProgressBarPanel;
+import frontend.*;
 
 
 public class Client 
@@ -34,7 +36,7 @@ public class Client
     private static Socket socket;
     private static Logger log = LogManager.getLogger(Client.class);		// Available modes : debug.fatal.error.warn.info
 
-    private static double downloadSpeedMbps = 0.0;
+    private static double downloadSpeedMbps = 5.0;	// i think this is the max speed, otherwise it filters based on my speed and i can't get the whole video list
     public static String videoChoice = null;
     public static String transferProtocolChoice = null;
     public static String TransferMethodChoice = null;
@@ -44,166 +46,189 @@ public class Client
     
     public static void main(String[] args) 
     {
-    	log.info("Speed Testing for " + SPEED_TEST_DURATION/1000 + " seconds...");
-        runJSpeedTest();
+    	SwingUtilities.invokeLater(() -> {
+            StartUpWindow startup = new StartUpWindow();
+
+            // Action: Connect to server
+            startup.setConnectAction(e -> {
+                new Thread(() -> {
+                    try
+                    {
+                    	// Connect to the load balancing server.
+                    	socket = new Socket(SERVER_HOST, SERVER_PORT);
+                    	startup.setServerInfo(SERVER_HOST, SERVER_PORT);
+                    	log.info("Connected to server at " + SERVER_HOST + ":" + SERVER_PORT);
+                    	
+                        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+
+                        
+                        // Get the actual server port from the balancer.
+                        out.println("Hello");
+                        String message = in.readLine();
+            	        if(message != null && message.contains("STREAM_SERVER:") == true)
+            	        {
+            	        	String[] parts = message.split(":");
+            	        	SERVER_PORT = Integer.parseInt(parts[1]);
+            	        	log.info("Load balancing server said to go to port:" + SERVER_PORT);
+            	        }
+            	        else
+            	        {
+            	        	log.error("Can't connect to the load balancing server. Message: " + message);
+            	        	log.error("Exiting...");
+            	        	return;
+            	        }
+            	        socket.close();
+            	        
+            	        
+            	        socket = new Socket(SERVER_HOST, SERVER_PORT);
+                        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                        out = new PrintWriter(socket.getOutputStream(), true);
+                        
+                        
+                        // Call GUI to select the desired video format.
+            	        String selectedFormat = ChooseVideoFormat.showFormatDialog();
+            	        if (selectedFormat == null) 
+            	        {
+            	        	log.error("User cancelled format selection.");
+            	        	return;
+            	        }
+            	        log.debug("Selected " + selectedFormat + " format.");
+            	        
+                        // 1# Send formatted information to the server so we can receive a list of videos.
+                        out.println(downloadSpeedMbps + ":" + selectedFormat);
+
+                        
+                        String line;
+                        StringBuilder result = new StringBuilder("Available videos:\n");
+                        while (!(line = in.readLine()).equals("END")) 
+                        {
+                            result.append(line).append("\n");
+                        }
+                        List<String> videoList = Arrays.asList(result.toString().split("\n"));
+                        
+                        
+                        // Call the GUI selector
+                        ChooseVideoFormat.showVideoAndProtocolSelection(videoList);
+                        if(videoChoice == null)
+                        {
+                        	log.error("User cancelled video selection.");
+                        	socket.close();
+                            return;
+                        }
+                        log.info("Chose video: " + videoChoice + ", with Transfer Protocol Choice: " + transferProtocolChoice);
+                        
+                        
+                        // 2# Send your choices to the server.
+                        out.println(videoChoice + ":" + transferProtocolChoice + ":" + TransferMethodChoice);
+                        
+                        
+                        // 3# Get the port you need to listen the video duration and bitrate. (PORT:XXXX,DURATION=XX.XX,BITRATE=XX.XX)
+                        STREAM_PORT = -1;
+                        if (!(line = in.readLine()).contains("PORT:")) 
+            			{
+            			    log.error("Server send unknown message when expecting streaming port: " + line);
+            			    socket.close();
+            			    return;
+            			}
+                        String[] server_args = line.split(",");
+                        STREAM_PORT = Integer.parseInt(server_args[0].replaceAll("PORT:", ""));
+                        
+                        // Try to parse "DURATION=60.12"
+                        double totalSeconds = 0;
+                        Pattern pattern = Pattern.compile("DURATION=(\\d+\\.?\\d*)");
+                        Matcher matcher = pattern.matcher(server_args[1]);
+                        if (matcher.find())
+                        {
+                            double seconds = Double.parseDouble(matcher.group(1));
+
+                            totalSeconds = seconds;
+                        }
+                        else
+                        {
+                        	log.error("Unformatted message from server, expected <PORT:XXXX,DURATION=XX.XX,BITRATE=XX.XX> format but received: " + line);
+                        	socket.close();
+                        	return;
+                        }
+                        
+                        int videoSize = Integer.parseInt(server_args[3].replace("SIZE=", ""));
+                        
+                        // Try to parse "BITRATE="
+                        int bitRate;
+                        if(server_args[2].replace("BITRATE=", "").equals("N/A")) // Probably because selectedFormat.equals(".mkv")
+                        {
+                        	bitRate = (int) ((videoSize * 8) / totalSeconds);
+                        } 
+                        else 
+                        {        	
+                        	bitRate = Integer.parseInt(server_args[2].replace("BITRATE=", ""));
+                        }
+                        double videoBitrateMbps = bitRate / 1000000.0;
+                        double videoSizeMb = videoBitrateMbps * totalSeconds;
+                        double expectedDownloadTime = videoSizeMb / downloadSpeedMbps;
+            			log.debug("Server said to listen to port " + STREAM_PORT + " for streaming...");
+            			log.debug("Server said the duration of the video is " + totalSeconds + " with size of " + videoSize + " bytes and the bit rate is " + bitRate);
+                        
+            			log.info("Calculated Video bitrate Mbps: " + videoBitrateMbps + ", for a total size of: " + videoSizeMb/8 + "MB (" + videoSizeMb + " Mbits)");
+            			log.info("Expected download time is: " + expectedDownloadTime + " seconds");
+                        
+            			
+                        if (TransferMethodChoice.equals("download"))
+                        {
+                        	// Initialize the progress bar gui.
+                            progressBarGui = new ProgressBarPanel((int)totalSeconds);
+                            //SwingUtilities.invokeLater(() -> progressBarGui.setVisible(true));
+
+                            
+                            // Receive the streaming video and save it in the downloads folder.
+                            downloadVideo(in, transferProtocolChoice, FFmpegLoader.getVideoSavePath(videoChoice).toString(), expectedDownloadTime);                
+                        }
+                        else if (TransferMethodChoice.equals("stream"))
+                        {
+                        	streamVideo(in, transferProtocolChoice);
+                        }
+                        else
+                        {
+                        	log.error("Undefined transfer method. Exiting...");
+                        }
+                        
+                        log.info("Video streaming is complete. Closing connection with the server...");
+                        socket.close();
+                    } 
+                    catch (IOException ex) 
+                    {
+                    	JOptionPane.showMessageDialog(startup,
+                                "Failed to connect: " + ex.getMessage(),
+                                "Connection Error",
+                                JOptionPane.ERROR_MESSAGE);
+                    }
+                }).start();
+            });
+
+            // Action: Run speed test
+            startup.setSpeedTestAction(e -> {
+                new Thread(() -> {
+                	log.info("Speed Testing for " + SPEED_TEST_DURATION/1000 + " seconds...");
+                    runJSpeedTest(); // your existing method
+                    // Wait for the speed test to finish.
+        	        try 
+        	        {
+        	            Thread.sleep(SPEED_TEST_DURATION);
+        	        } 
+        	        catch (InterruptedException e1) 
+        	        {
+        	            e1.printStackTrace();
+        	        }
+        	        log.debug("Download test time is up.");
+                }).start();
+            });
+
+            startup.setVisible(true);
+        });
+    	
+
         
-        // Wait for the speed test to finish.
-        try 
-        {
-            Thread.sleep(SPEED_TEST_DURATION);
-        } 
-        catch (InterruptedException e) 
-        {
-            e.printStackTrace();
-        }
-        log.debug("Download test time is up.");
-
-
         
-        try
-        {
-        	// Connect to the load balancing server.
-        	socket = new Socket(SERVER_HOST, SERVER_PORT);
-            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-
-            
-            // Get the actual server port from the balancer.
-            out.println("Hello");
-            String message = in.readLine();
-	        if(message != null && message.contains("STREAM_SERVER:") == true)
-	        {
-	        	String[] parts = message.split(":");
-	        	SERVER_PORT = Integer.parseInt(parts[1]);
-	        	log.info("Load balancing server said to go to port:" + SERVER_PORT);
-	        }
-	        else
-	        {
-	        	log.error("Can't connect to the load balancing server. Message: " + message);
-	        	log.error("Exiting...");
-	        	return;
-	        }
-	        socket.close();
-	        
-	        
-	        socket = new Socket(SERVER_HOST, SERVER_PORT);
-            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            out = new PrintWriter(socket.getOutputStream(), true);
-            
-            
-            // Call GUI to select the desired video format.
-	        String selectedFormat = ChooseVideoFormat.showFormatDialog();
-	        if (selectedFormat == null) 
-	        {
-	        	log.error("User cancelled format selection.");
-	        	return;
-	        }
-	        log.debug("Selected " + selectedFormat + " format.");
-	        
-            // 1# Send formatted information to the server so we can receive a list of videos.
-            out.println(downloadSpeedMbps + ":" + selectedFormat);
-
-            
-            String line;
-            StringBuilder result = new StringBuilder("Available videos:\n");
-            while (!(line = in.readLine()).equals("END")) 
-            {
-                result.append(line).append("\n");
-            }
-            List<String> videoList = Arrays.asList(result.toString().split("\n"));
-            
-            
-            // Call the GUI selector
-            ChooseVideoFormat.showVideoAndProtocolSelection(videoList);
-            if(videoChoice == null)
-            {
-            	log.error("User cancelled video selection.");
-            	socket.close();
-                return;
-            }
-            log.info("Chose video: " + videoChoice + ", with Transfer Protocol Choice: " + transferProtocolChoice);
-            
-            
-            // 2# Send your choices to the server.
-            out.println(videoChoice + ":" + transferProtocolChoice + ":" + TransferMethodChoice);
-            
-            
-            // 3# Get the port you need to listen the video duration and bitrate. (PORT:XXXX,DURATION=XX.XX,BITRATE=XX.XX)
-            STREAM_PORT = -1;
-            if (!(line = in.readLine()).contains("PORT:")) 
-			{
-			    log.error("Server send unknown message when expecting streaming port: " + line);
-			    socket.close();
-			    return;
-			}
-            String[] server_args = line.split(",");
-            STREAM_PORT = Integer.parseInt(server_args[0].replaceAll("PORT:", ""));
-            
-            // Try to parse "DURATION=60.12"
-            double totalSeconds = 0;
-            Pattern pattern = Pattern.compile("DURATION=(\\d+\\.?\\d*)");
-            Matcher matcher = pattern.matcher(server_args[1]);
-            if (matcher.find())
-            {
-                double seconds = Double.parseDouble(matcher.group(1));
-
-                totalSeconds = seconds;
-            }
-            else
-            {
-            	log.error("Unformatted message from server, expected <PORT:XXXX,DURATION=XX.XX,BITRATE=XX.XX> format but received: " + line);
-            	socket.close();
-            	return;
-            }
-            
-            int videoSize = Integer.parseInt(server_args[3].replace("SIZE=", ""));
-            
-            // Try to parse "BITRATE="
-            int bitRate;
-            if(server_args[2].replace("BITRATE=", "").equals("N/A")) // Probably because selectedFormat.equals(".mkv")
-            {
-            	bitRate = (int) ((videoSize * 8) / totalSeconds);
-            } 
-            else 
-            {        	
-            	bitRate = Integer.parseInt(server_args[2].replace("BITRATE=", ""));
-            }
-            double videoBitrateMbps = bitRate / 1000000.0;
-            double videoSizeMb = videoBitrateMbps * totalSeconds;
-            double expectedDownloadTime = videoSizeMb / downloadSpeedMbps;
-			log.debug("Server said to listen to port " + STREAM_PORT + " for streaming...");
-			log.debug("Server said the duration of the video is " + totalSeconds + " with size of " + videoSize + " bytes and the bit rate is " + bitRate);
-            
-			log.info("Calculated Video bitrate Mbps: " + videoBitrateMbps + ", for a total size of: " + videoSizeMb/8 + "MB (" + videoSizeMb + " Mbits)");
-			log.info("Expected download time is: " + expectedDownloadTime + " seconds");
-            
-			
-            if (TransferMethodChoice.equals("download"))
-            {
-            	// Initialize the progress bar gui.
-                progressBarGui = new ProgressBarPanel((int)totalSeconds);
-                //SwingUtilities.invokeLater(() -> progressBarGui.setVisible(true));
-
-                
-                // Receive the streaming video and save it in the downloads folder.
-                downloadVideo(in, transferProtocolChoice, FFmpegLoader.getVideoSavePath(videoChoice).toString(), expectedDownloadTime);                
-            }
-            else if (TransferMethodChoice.equals("stream"))
-            {
-            	streamVideo(in, transferProtocolChoice);
-            }
-            else
-            {
-            	log.error("Undefined transfer method. Exiting...");
-            }
-            
-            log.info("Video streaming is complete. Closing connection with the server...");
-            socket.close();
-        } 
-        catch (IOException e) 
-        {
-            e.printStackTrace();
-        }
     }
 
     

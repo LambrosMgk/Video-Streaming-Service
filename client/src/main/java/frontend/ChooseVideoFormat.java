@@ -19,6 +19,7 @@ public class ChooseVideoFormat
 	    frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 	    //frame.setUndecorated(true);  // No window chrome
 	    frame.setVisible(true);
+	    frame.setLocationRelativeTo(null);
 
 	    String[] options = {".mp4", ".avi", ".mkv"};
 	    String answer = (String) JOptionPane.showInputDialog(
@@ -41,6 +42,7 @@ public class ChooseVideoFormat
 	    JFrame frame = new JFrame();
 	    frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 	    frame.setVisible(true);
+	    frame.setLocationRelativeTo(null);
 
 	    JComboBox<String> videoBox = new JComboBox<>(videoNames.toArray(new String[0]));
 

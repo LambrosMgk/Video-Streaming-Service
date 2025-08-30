@@ -4,11 +4,15 @@ package shared;
 import java.io.*;
 import java.nio.file.*;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 
 
 public class FFmpegLoader 
 {
 	private static final String FFMPEG_FOLDER = "ffmpeg";
+	private static final Logger log = LogManager.getLogger(FFmpegLoader.class);	// Available modes : debug.fatal.error.warn.info
 	
 	
 	/**
@@ -25,12 +29,17 @@ public class FFmpegLoader
         File externalExe = jarDir.resolve(FFMPEG_FOLDER).resolve(exeName).toFile();
         if (externalExe.exists()) 
         {
-            System.out.println("Using external ffplay: " + externalExe.getAbsolutePath());
+            log.info("Using external ffplay: " + externalExe.getAbsolutePath());
             return externalExe;
         }
+        else
+        {
+        	log.warn("External folder of ffmpeg not found. Fallback to bundled resources...");
+        }
+        
 
         // 2️) Fallback to bundled resource inside JAR
-        String resourcePath = "/" + FFMPEG_FOLDER + "/" + exeName;
+        String resourcePath = "/" + FFMPEG_FOLDER + "/bin/" + exeName;
         InputStream is = FFmpegLoader.class.getResourceAsStream(resourcePath);
         if (is == null)
         {
@@ -46,7 +55,7 @@ public class FFmpegLoader
         Files.copy(is, tempExe.toPath(), StandardCopyOption.REPLACE_EXISTING);
         
         if (!isWindows()) tempExe.setExecutable(true); // make executable on Unix
-        	System.out.println("Using bundled ffplay: " + tempExe.getAbsolutePath());
+        	log.info("Using bundled ffplay: " + tempExe.getAbsolutePath());
         
         return tempExe;
     }

@@ -4,6 +4,8 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -29,24 +31,38 @@ public class Server
     private static final Logger log = LogManager.getLogger(Server.class);	// Available modes : debug.fatal.error.warn.info
 
     
-    private static final String VIDEO_FOLDER = "src/Videos";
+    private static String VIDEO_FOLDER = "../Videos";
     private static final String[] EXTENSIONS = {".avi", ".mp4", ".mkv"};
     private static final String[] QUALITIES = {"240p", "360p", "480p", "720p", "1080p"};
     //private static final Double[] RECOMMENDED_Kbps = {400.0, 750.0, 1000.0, 2500.0, 4500.0};
     
+    private static java.util.function.IntConsumer progressCallback = null;
+    private static AtomicBoolean cancelFlag = new AtomicBoolean(false);
     
     
-    public static void main(String[] args) 
+    /**
+     * This function starts the server with arguments given from the GUI (instead of CLI that i used to do)
+     */
+    public static void main(String[] args)
     {
-    	// Check the Videos folder and convert any videos that you can.
-        scanAndPrepareVideos();
-
-        if(args.length != 1)
-        {
-        	log.error("Invalid number of arguments. Usage: server.java XXXX;  where XXXX is an integer.");
-        }
+    	if (args.length != 3)
+    	{
+    	    log.error("Usage: Server <port> <video_folder>");
+    	    return;
+    	}
         SERVER_PORT = Integer.parseInt(args[0]);
-        log.info("Started server at port " + SERVER_PORT);
+        VIDEO_FOLDER = args[1];
+        boolean CONVERT_AT_START = Boolean.parseBoolean(args[2]);
+
+        
+
+        
+        log.info("Starting server on port %d, video folder=%s, convertAtStart=%s%n",
+                SERVER_PORT, VIDEO_FOLDER, CONVERT_AT_START);
+        
+        log.info("Checking %s folder", VIDEO_FOLDER);
+        // Check the Videos folder and convert any videos that you can.
+        scanAndPrepareVideos(CONVERT_AT_START);
         log.info("Going to connect to the load balancing server...");
         
         // Connect to the load balancer first.
@@ -100,7 +116,7 @@ public class Server
 				Socket clientSocket = serverSocket.accept();
 				log.info("Client connected!");
 				totalClients++;
-				new ServerThread(clientSocket, acquirePort(), availableVideos).start();			
+				new ServerThread(clientSocket, acquirePort(), availableVideos, VIDEO_FOLDER).start();			
 			}
 	        
 	        log.info("Server has finished and is now closing...");
@@ -117,10 +133,11 @@ public class Server
     
 
     
-    /*
+    /**
      * This function scans the "Videos" folder and checks what videos are available. It then tries to create any missing videos.
+     * Video name format: name-quality.extension e.g. FoodWars_ep1-1080p.mp4
      */
-    private static void scanAndPrepareVideos()
+    private static void scanAndPrepareVideos(boolean convertBool)
     {
         File folder = new File(VIDEO_FOLDER);
         File[] files = folder.listFiles();
@@ -142,7 +159,7 @@ public class Server
             exists = false;
             for(VideoInfo vid : availableVideos)
             {
-            	// In case of a duplicate file doesn't check if that file is already in the list. We can't have duplicate files (with the same name) so we're ok!
+            	// In case of a duplicate file doesn't check if that file is already in the list. We can't have duplicate files (OS won't allow it) so we're ok!
             	if(vid.getName().compareTo(baseName) == 0)
             	{
             		log.info("Adding new variant video for name " + vid.getName() + ", " + extension + ", " + quality + " ...");
@@ -177,45 +194,62 @@ public class Server
         
         
         // Check what videos are missing and try to create them with FFMPEG.
-        for(VideoInfo vid : availableVideos)
+        if(convertBool)
         {
-        	ArrayList<String> vidExtensions = vid.getExtension();
-        	ArrayList<String> vidQualities = vid.getQuality();
-        	boolean pairExists = false;
+        	// availableVideos also stores the variants so it has all the UNIQUE videos, allowing easy calculation for the total missing files
+        	int total = (availableVideos.size() * EXTENSIONS.length * QUALITIES.length) - files.length;
+        	int done = 0;
         	
-    		for (String extension : EXTENSIONS)
+            for(VideoInfo vid : availableVideos)
             {
-                for (String quality : QUALITIES)
-                {
-                	pairExists = false;
-                	for(int i = 0; i < vidExtensions.size(); i++)		// The video extensions and qualities list will have the same size.
-                	{
-                		// Does the pair <quality,extension> exist?
-                    	if(vidExtensions.get(i).equals(extension) && vidQualities.get(i).equals(quality))
-                		{
-                    		pairExists = true;
-                			break;
-                		}
-                	}
-                	
-                	if(!pairExists)
-                	{
-                		String vidQuality = vid.getQuality().get(vid.getBestQualityIndex());
-                		String vidExtension = vid.getExtension().get(vid.getBestQualityIndex());	// Get the extension thats paired with the quality
-                		String baseFileName = vid.getName() + "-" + vidQuality + vidExtension;
-                		String targetFileName = vid.getName() + "-" + quality + extension;
-                		
-                		
-                		log.info("Missing " + vid.getName() + ": " + quality + ", " + extension + ", trying to create the file...");
-                		// Try to create the missing extension and quality...
-                		
-                		convertVideo(folder.getAbsolutePath() + "\\" + baseFileName, vidQuality, folder.getAbsolutePath() + "\\" + targetFileName, quality, extension);
-                		
-                		log.debug("Done.");
-                	}
+            	if (isCancelled())
+            	{
+                    System.out.println("Conversion cancelled by user.");
+                    break;
                 }
+            	
+            	ArrayList<String> vidExtensions = vid.getExtension();
+            	ArrayList<String> vidQualities = vid.getQuality();
+            	boolean pairExists = false;
+            	
+        		for (String extension : EXTENSIONS)
+                {
+                    for (String quality : QUALITIES)
+                    {
+                    	pairExists = false;
+                    	for(int i = 0; i < vidExtensions.size(); i++)		// The video extensions and qualities list will have the same size.
+                    	{
+                    		// Does the pair <quality,extension> exist?
+                        	if(vidExtensions.get(i).equals(extension) && vidQualities.get(i).equals(quality))
+                    		{
+                        		pairExists = true;
+                    			break;
+                    		}
+                    	}
+                    	
+                    	if(!pairExists)
+                    	{
+                    		String vidQuality = vid.getQuality().get(vid.getBestQualityIndex());
+                    		String vidExtension = vid.getExtension().get(vid.getBestQualityIndex());	// Get the extension thats paired with the quality
+                    		String baseFileName = vid.getName() + "-" + vidQuality + vidExtension;
+                    		String targetFileName = vid.getName() + "-" + quality + extension;
+                    		
+                    		
+                    		log.info("Missing " + vid.getName() + ": " + quality + ", " + extension + ", trying to create the file...");
+                    		// Try to create the missing extension and quality...
+                    		
+                    		convertVideo(folder.getAbsolutePath() + "\\" + baseFileName, vidQuality, folder.getAbsolutePath() + "\\" + targetFileName, quality, extension);
+                    		
+                    		log.debug("Done.");
+                    	}
+                    }
+                }
+        		done++;
+        		reportProgress((done * 100) / total);
             }
         }
+        // End of convert process
+        
     }
     
     
@@ -313,6 +347,30 @@ public class Server
     public synchronized static boolean releasePort(int port) 
     {
         return inUse.remove(port);
+    }
+    
+    
+    public static void setProgressCallback(java.util.function.IntConsumer callback)
+    {
+        progressCallback = callback;
+    }
+
+    public static void setCancelFlag(AtomicBoolean flag) 
+    {
+        cancelFlag = flag;
+    }
+
+    private static void reportProgress(int percent)
+    {
+        if (progressCallback != null)
+        {
+            progressCallback.accept(percent);
+        }
+    }
+
+    private static boolean isCancelled()
+    {
+        return cancelFlag != null && cancelFlag.get();
     }
     
 }

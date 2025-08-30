@@ -14,7 +14,7 @@ import shared.FFmpegLoader;
 
 
 
-public class ServerThread extends Thread 
+public class ServerThread extends Thread
 {
 	private final Logger log = LogManager.getLogger(ServerThread.class);
     
@@ -23,18 +23,19 @@ public class ServerThread extends Thread
 	private String clientIP = "localhost";	// Could be changed to stream outside of localhost
 	private ArrayList<VideoInfo> availableVideos;
 	
-    private static final String VIDEO_FOLDER = "src/Videos";
+    private static String VIDEO_FOLDER = "src/Videos";
     //private static final String[] EXTENSIONS = {".avi", ".mp4", ".mkv"};
     private static final String[] QUALITIES = {"240p", "360p", "480p", "720p", "1080p"};
     private static final Double[] RECOMMENDED_Kbps = {400.0, 750.0, 1000.0, 2500.0, 4500.0};
  
     
     // Constructor.
-    public ServerThread(Socket clientSocket, int stream_port, ArrayList<VideoInfo> availVideos) 
+    public ServerThread(Socket clientSocket, int stream_port, ArrayList<VideoInfo> availVideos, String video_folder) 
     {
         this.clientSocket = clientSocket;
         this.STREAM_PORT = stream_port;
         this.availableVideos = availVideos;
+        ServerThread.VIDEO_FOLDER = video_folder;
     }
  
     
