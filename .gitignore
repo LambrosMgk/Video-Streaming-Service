@@ -28,3 +28,8 @@ resources/ffmpeg/*
 
 # Ignore stream_*.sdp files
 resources/stream_*.sdp
+
+# Ignore my notes
+notes.txt
+
+ffmpeg/
