@@ -11,26 +11,31 @@ import org.apache.logging.log4j.Logger;
 public class MainServer 
 {
 	private static final Logger log = LogManager.getLogger(MainServer.class);
-	private static final String serverName = "localhost";
-	private static final int MainServerPort = 1111;
+	
+	private static final String balancerIP = "localhost";
+	private static final int balancerPort = 1111;
 	
 	private static int totalServers;
 	private static int currentServer;
-	private static ArrayList<String> serverPorts;
+	private static ArrayList<String> serverIPs, serverPorts;
+	
 	
 	
 	public static void main(String[] args)
 	{
 		ServerSocket balancer;
+		
 		try 
 		{
 			// Note: could implement a health check in case a server fails in the future.
-			
 			totalServers = 0;
 			currentServer = -1;		// No servers available.
+			serverIPs = new ArrayList<String>();
 			serverPorts = new ArrayList<String>();
-			balancer = new ServerSocket(MainServerPort);
-			log.info("Load balancing server started at port " + MainServerPort);
+			balancer = new ServerSocket(balancerPort);
+			log.info("Load balancing server started at (IP):(Port), " + balancerIP + ":" + balancerPort);
+			
+			
 			while(true)
 			{
 				// Get the next server using the Round Robin technique.
@@ -46,10 +51,14 @@ public class MainServer
 		        {
 		        	// Add the new server to the list.
 			        String[] parts = message.split(":");
-			        String serverPort = parts[1];
+			        String serverIP = parts[1];
+			        String serverPort = parts[2];
+			        
+			        serverIPs.add(serverIP);
 			        serverPorts.add(serverPort);
 			        totalServers++;
-			        log.info("Added server with port: " + serverPort);
+			        
+			        log.info("Added server " + serverIP + ":" + serverPort);
 			        log.debug("Total servers are now " + totalServers);
 			        
 			        out.println("OKAY:" + (totalServers-1));
@@ -59,8 +68,8 @@ public class MainServer
 		        
 			    if(currentServer != -1)
 			    {		
-			    	log.info("Client connected, redirecting to server port: " + serverPorts.get(currentServer));
-			    	out.println("STREAM_SERVER:" + serverPorts.get(currentServer));
+			    	log.info("Client connected, redirecting to server " + serverIPs.get(currentServer) + ":" + serverPorts.get(currentServer));
+			    	out.println("STREAM_SERVER:" + serverIPs.get(currentServer) + ":" + serverPorts.get(currentServer));
 			    }
 			    else
 			    {

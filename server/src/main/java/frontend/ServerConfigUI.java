@@ -1,5 +1,6 @@
 package frontend;
 
+import backend.NetUtil;
 import backend.Server;
 
 import javax.swing.*;
@@ -7,8 +8,10 @@ import java.awt.*;
 import java.io.File;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class ServerConfigUI extends JFrame {
+public class ServerConfigUI extends JFrame
+{
 
+	private JTextField serverIpField;
     private JTextField portField;
     private JTextField folderField;
     private JButton browseButton;
@@ -39,18 +42,30 @@ public class ServerConfigUI extends JFrame {
         gbc.insets = new Insets(8, 8, 8, 8);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        // Server Port
+        // Server IP
         gbc.gridx = 0;
         gbc.gridy = 0;
+        panel.add(new JLabel("Server IP:"), gbc);
+        
+        gbc.gridx = 1;
+        serverIpField = new JTextField("Unknown", 15);
+        serverIpField.setEditable(false);
+        panel.add(serverIpField, gbc);
+        
+        
+        // Server Port
+        gbc.gridx = 0;
+        gbc.gridy = 1;
         panel.add(new JLabel("Server Port:"), gbc);
 
         gbc.gridx = 1;
         portField = new JTextField(default_server_port, 10);
         panel.add(portField, gbc);
 
+        
         // Folder Selection
         gbc.gridx = 0;
-        gbc.gridy = 1;
+        gbc.gridy = 2;
         panel.add(new JLabel("Videos Folder:"), gbc);
 
         gbc.gridx = 1;
@@ -62,9 +77,10 @@ public class ServerConfigUI extends JFrame {
         browseButton.addActionListener(e -> chooseFolder());
         panel.add(browseButton, gbc);
 
+        
         // Convert videos option
         gbc.gridx = 0;
-        gbc.gridy = 2;
+        gbc.gridy = 3;
         panel.add(new JLabel("Convert videos at start?"), gbc);
 
         gbc.gridx = 1;
@@ -79,22 +95,25 @@ public class ServerConfigUI extends JFrame {
         radioPanel.add(convertNo);
         panel.add(radioPanel, gbc);
 
+        
         // Start Button
         gbc.gridx = 1;
-        gbc.gridy = 3;
+        gbc.gridy = 4;
         startButton = new JButton("Start Server");
         startButton.addActionListener(e -> startServer());
         panel.add(startButton, gbc);
 
+        
         // Progress Bar
         gbc.gridx = 0;
-        gbc.gridy = 4;
+        gbc.gridy = 5;
         gbc.gridwidth = 2;
         progressBar = new JProgressBar(0, 100);
         progressBar.setStringPainted(true);
         progressBar.setVisible(false);
         panel.add(progressBar, gbc);
 
+        
         // Cancel Button
         gbc.gridx = 2;
         cancelButton = new JButton("Cancel");
@@ -105,42 +124,54 @@ public class ServerConfigUI extends JFrame {
         add(panel);
     }
 
-    private void chooseFolder() {
+    
+    private void chooseFolder()
+    {
         JFileChooser chooser = new JFileChooser();
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+        
+        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION)
+        {
             folderField.setText(chooser.getSelectedFile().getAbsolutePath());
         }
     }
 
+    
     private void startServer()
     {
         String portText = portField.getText().trim();
         String folderPath = folderField.getText().trim();
-
-        // Validate port
         int port;
-        try {
+
+        
+        // Validate port
+        try
+        {
             port = Integer.parseInt(portText);
-            if (port < 1024 || port > 65535) {
+            if (port < 1024 || port > 65535)
+            {
                 throw new NumberFormatException("Invalid range");
             }
-        } catch (NumberFormatException ex) {
+        }
+        catch (NumberFormatException ex)
+        {
             JOptionPane.showMessageDialog(this, "Please enter a valid port (1024-65535).",
                     "Invalid Port", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
+        
         // Validate folder
         File folder = new File(folderPath);
-        if (!folder.exists() || !folder.isDirectory()) {
+        if (!folder.exists() || !folder.isDirectory())
+        {
             JOptionPane.showMessageDialog(this, "Please select a valid folder.",
                     "Invalid Folder", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
-        String convertFlag = convertYes.isSelected() ? "true" : "false";
 
+        String convertFlag = convertYes.isSelected() ? "true" : "false";
         // Disable inputs
         portField.setEnabled(false);
         folderField.setEnabled(false);
@@ -152,27 +183,31 @@ public class ServerConfigUI extends JFrame {
         // Reset cancel flag
         cancelRequested.set(false);
 
+       
         // Show progress bar if conversion is needed
-        if (convertFlag.equals("true")) {
+        if (convertFlag.equals("true"))
+        {
             progressBar.setVisible(true);
             progressBar.setValue(0);
             cancelButton.setEnabled(true);
         }
 
+        
         // Background task
         SwingWorker<Void, Integer> worker = new SwingWorker<>() {
             @Override
             protected Void doInBackground() {
-                try {
+                try
+                {
                     Server.setProgressCallback(percent -> publish(percent));
                     Server.setCancelFlag(cancelRequested);
-
-                    Server.main(new String[]{
-                            String.valueOf(port),
-                            folderPath,
-                            convertFlag
-                    });
-                } catch (Exception e) {
+                    String serverIP = NetUtil.getLocalIPv4();
+                    
+                    setServerIp(serverIP);
+                    Server.Start(serverIP, port, folderPath, convertYes.isSelected());
+                } 
+                catch (Exception e)
+                {
                     e.printStackTrace();
                     SwingUtilities.invokeLater(() ->
                             JOptionPane.showMessageDialog(ServerConfigUI.this,
@@ -208,8 +243,16 @@ public class ServerConfigUI extends JFrame {
 
         worker.execute();
     }
+    
+    
+    public void setServerIp(String ip)
+    {
+        SwingUtilities.invokeLater(() -> serverIpField.setText(ip));
+    }
 
-    public static void main(String[] args) {
+    
+    public static void main(String[] args)
+    {
         SwingUtilities.invokeLater(() -> new ServerConfigUI().setVisible(true));
     }
 }

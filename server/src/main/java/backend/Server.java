@@ -19,8 +19,10 @@ import shared.FFmpegLoader;
 public class Server
 {
 	private static final int BALANCER_PORT = 1111;
-    private static final String SERVER_IP = "localhost";
+    private static String BALANCER_IP = "localhost";	// default value
+    private static String SERVER_IP = "localhost";
     private static int SERVER_PORT;
+    
     private static final int MAX_CLIENTS = 10;		// Set the maximum clients served at the same time to define the number ports.
     private static int[] availablePorts = {5000, 5002, 5004, 5006, 5008, 5010, 5012, 5014, 5016, 5018};	// The available ports will be max_clinets * 2 because RTP uses 2 ports.
     private static int Total_Clients = 15;		// Total requests that will be processed before shutting down.
@@ -43,37 +45,37 @@ public class Server
     /**
      * This function starts the server with arguments given from the GUI (instead of CLI that i used to do)
      */
-    public static void main(String[] args)
+    public static void Start(String serverIP, int serverPort, String videoFolderPath, boolean doConversion)
     {
-    	if (args.length != 3)
-    	{
-    	    log.error("Usage: Server <port> <video_folder>");
-    	    return;
-    	}
-        SERVER_PORT = Integer.parseInt(args[0]);
-        VIDEO_FOLDER = args[1];
-        boolean CONVERT_AT_START = Boolean.parseBoolean(args[2]);
+    	if(serverIP.compareTo("") != 0)
+    		SERVER_IP = serverIP;
+    	
+        SERVER_PORT = serverPort;
+        VIDEO_FOLDER = videoFolderPath;
+        boolean CONVERT_AT_START = doConversion;
 
         
+        
+        log.info("Starting server at " + SERVER_IP + ":" + SERVER_PORT);
+        log.info("Server args: video folder=%s, convertAtStart=%s%n", VIDEO_FOLDER, CONVERT_AT_START);
 
         
-        log.info("Starting server on port %d, video folder=%s, convertAtStart=%s%n",
-                SERVER_PORT, VIDEO_FOLDER, CONVERT_AT_START);
-        
+        // Check the Videos folder and (if toggled) convert any videos that you can.
         log.info("Checking %s folder", VIDEO_FOLDER);
-        // Check the Videos folder and convert any videos that you can.
         scanAndPrepareVideos(CONVERT_AT_START);
         log.info("Going to connect to the load balancing server...");
+        
         
         // Connect to the load balancer first.
         Socket socket;
 		try 
 		{
-			socket = new Socket(SERVER_IP, BALANCER_PORT);
+			socket = new Socket(BALANCER_IP, BALANCER_PORT);
 			BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 	        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 	        
-	        out.println("SERVER:" + SERVER_PORT);
+	        
+	        out.println("SERVER:" + SERVER_IP + ":" + SERVER_PORT);
 	        String message = in.readLine();			// Get load balancer response.
 	        if(message != null && message.contains("OKAY:") == true)
 	        {
@@ -95,13 +97,13 @@ public class Server
 		
         
 		// Add an offset to your ports based on the index you got from the balancer.
-		System.out.print("Server " + SERVER_PORT + " has available the ports: "); // Usage of system.out for a cleaner output.
+		System.out.print("Server " + SERVER_PORT + " has available the ports: [ "); // Usage of system.out for a cleaner output.
 		for(int i = 0; i < availablePorts.length; i++)
 		{
 			availablePorts[i] = availablePorts[i] + balancer_index*20;
 			System.out.print(availablePorts[i] + " ");		// Usage of system.out for a cleaner output.
 		}
-		System.out.println();
+		System.out.println("]");
 		
 		
     	// Create a socket on the SERVER_PORT and wait for a connection (Client).
@@ -111,6 +113,8 @@ public class Server
 			int totalClients = 0;
 			serverSocket = new ServerSocket(SERVER_PORT);
 			log.info("Server started. Waiting for a client on port " + SERVER_PORT);
+			
+			
 			while(totalClients < Total_Clients)
 			{
 				Socket clientSocket = serverSocket.accept();
@@ -344,6 +348,7 @@ public class Server
         throw new RuntimeException("No available ports");
     }
 
+    
     public synchronized static boolean releasePort(int port) 
     {
         return inUse.remove(port);
@@ -355,11 +360,7 @@ public class Server
         progressCallback = callback;
     }
 
-    public static void setCancelFlag(AtomicBoolean flag) 
-    {
-        cancelFlag = flag;
-    }
-
+    
     private static void reportProgress(int percent)
     {
         if (progressCallback != null)
@@ -367,6 +368,13 @@ public class Server
             progressCallback.accept(percent);
         }
     }
+    
+    
+    public static void setCancelFlag(AtomicBoolean flag) 
+    {
+        cancelFlag = flag;
+    }
+    
 
     private static boolean isCancelled()
     {

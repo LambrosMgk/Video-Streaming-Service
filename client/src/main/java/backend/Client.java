@@ -26,8 +26,11 @@ import frontend.*;
 
 public class Client 
 {
-    private static final String SERVER_HOST = "localhost";
+    private static String MAIN_SERVER_HOST = "localhost";	// Default values
+    private static int MAIN_SERVER_PORT = 1111;
+    private static String SERVER_HOST = "localhost";
     private static int SERVER_PORT = 1111;
+    
     private static final int UDP_BUFFER_SIZE = 65536;		// 64KB
     private static final int SPEED_TEST_DURATION = 5000;	// in milliseconds
     private static final int SPEED_TEST_INTERVAL = 1000;	// in milliseconds
@@ -51,13 +54,24 @@ public class Client
 
             // Action: Connect to server
             startup.setConnectAction(e -> {
+            	
+            	MAIN_SERVER_HOST = startup.getServerIp();
+                MAIN_SERVER_PORT = startup.getServerPort();
+                SERVER_HOST = MAIN_SERVER_HOST;		// Server might be in the same host (but different port)
+                
+                if (MAIN_SERVER_PORT <= 0) 
+                {
+                    JOptionPane.showMessageDialog(startup, "Invalid port number!", "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                
                 new Thread(() -> {
                     try
                     {
                     	// Connect to the load balancing server.
-                    	socket = new Socket(SERVER_HOST, SERVER_PORT);
-                    	startup.setServerInfo(SERVER_HOST, SERVER_PORT);
-                    	log.info("Connected to server at " + SERVER_HOST + ":" + SERVER_PORT);
+                    	socket = new Socket(MAIN_SERVER_HOST, MAIN_SERVER_PORT);
+                    	startup.setServerInfo(MAIN_SERVER_HOST, MAIN_SERVER_PORT);
+                    	log.info("Connected to server at " + MAIN_SERVER_HOST + ":" + MAIN_SERVER_PORT);
                     	
                         BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                         PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
@@ -69,8 +83,9 @@ public class Client
             	        if(message != null && message.contains("STREAM_SERVER:") == true)
             	        {
             	        	String[] parts = message.split(":");
-            	        	SERVER_PORT = Integer.parseInt(parts[1]);
-            	        	log.info("Load balancing server said to go to port:" + SERVER_PORT);
+            	        	SERVER_HOST = parts[1];
+            	        	SERVER_PORT = Integer.parseInt(parts[2]);
+            	        	log.info("Load balancing server said to go to " + SERVER_HOST + ":" + SERVER_PORT);
             	        }
             	        else
             	        {

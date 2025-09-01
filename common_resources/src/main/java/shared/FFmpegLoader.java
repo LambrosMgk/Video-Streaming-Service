@@ -25,8 +25,9 @@ public class FFmpegLoader
     	
     	
         // 1️) Try external folder beside JAR
-    	Path jarDir = Paths.get(System.getProperty("user.dir"));
-        File externalExe = jarDir.resolve(FFMPEG_FOLDER).resolve(exeName).toFile();
+    	Path jarDir = Paths.get(System.getProperty("user.dir"));	// Directory where the JAR was launched
+    	Path externalPath = jarDir.resolve(FFMPEG_FOLDER).resolve(exeName);
+        File externalExe = externalPath.toFile();
         if (externalExe.exists()) 
         {
             log.info("Using external ffplay: " + externalExe.getAbsolutePath());
@@ -38,26 +39,32 @@ public class FFmpegLoader
         }
         
 
-        // 2️) Fallback to bundled resource inside JAR
+        // 2️) Fallback to bundled resource inside JAR (extract bundled resource to ./ffmpeg/)
         String resourcePath = "/" + FFMPEG_FOLDER + "/bin/" + exeName;
-        InputStream is = FFmpegLoader.class.getResourceAsStream(resourcePath);
-        if (is == null)
+        try (InputStream is = FFmpegLoader.class.getResourceAsStream(resourcePath)) 
         {
-            throw new FileNotFoundException(
-                "ffplay not found! Checked external folder ./ffmpeg and bundled resource: " + resourcePath
-            );
+            if (is == null)
+            {
+                throw new FileNotFoundException(
+                    tool + " not found! Checked external folder ./ffmpeg and bundled resource: " + resourcePath
+                );
+            }
+            
+            // Ensure ./ffmpeg folder exists
+            Files.createDirectories(externalPath.getParent());
+            
+            // Copy bundled binary to ./ffmpeg/<exeName>
+            Files.copy(is, externalPath, StandardCopyOption.REPLACE_EXISTING);
+            
+            // make executable on Unix
+            if (!isWindows())
+            {
+                externalExe.setExecutable(true); 
+            }
+            
+            log.info("Extracted bundled " + tool + " to: " + externalExe.getAbsolutePath());
+            return externalExe;
         }
-
-        
-        // Copy to temp file so ProcessBuilder can run it
-        File tempExe = File.createTempFile(exeName, exeName.endsWith(".exe") ? ".exe" : "");
-        tempExe.deleteOnExit();
-        Files.copy(is, tempExe.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        
-        if (!isWindows()) tempExe.setExecutable(true); // make executable on Unix
-        	log.info("Using bundled ffplay: " + tempExe.getAbsolutePath());
-        
-        return tempExe;
     }
     
     private static String getExecutableName(String tool)
