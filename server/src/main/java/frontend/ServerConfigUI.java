@@ -25,6 +25,13 @@ public class ServerConfigUI extends JFrame
     private AtomicBoolean cancelRequested = new AtomicBoolean(false);
 
     
+    
+    public static void main(String[] args)
+    {
+        SwingUtilities.invokeLater(() -> new ServerConfigUI().setVisible(true));
+    }
+    
+    
     public ServerConfigUI()
     {
         setTitle("Server Configuration");
@@ -49,7 +56,7 @@ public class ServerConfigUI extends JFrame
         
         gbc.gridx = 1;
         serverIpField = new JTextField("Unknown", 15);
-        serverIpField.setEditable(false);
+        serverIpField.setEditable(true);
         panel.add(serverIpField, gbc);
         
         
@@ -139,6 +146,7 @@ public class ServerConfigUI extends JFrame
     
     private void startServer()
     {
+    	String serverIP = serverIpField.getText().trim();
         String portText = portField.getText().trim();
         String folderPath = folderField.getText().trim();
         int port;
@@ -160,19 +168,10 @@ public class ServerConfigUI extends JFrame
             return;
         }
 
-        
-        // Validate folder
-        File folder = new File(folderPath);
-        if (!folder.exists() || !folder.isDirectory())
-        {
-            JOptionPane.showMessageDialog(this, "Please select a valid folder.",
-                    "Invalid Folder", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-
         String convertFlag = convertYes.isSelected() ? "true" : "false";
+        
         // Disable inputs
+        serverIpField.setEnabled(false);
         portField.setEnabled(false);
         folderField.setEnabled(false);
         browseButton.setEnabled(false);
@@ -201,10 +200,10 @@ public class ServerConfigUI extends JFrame
                 {
                     Server.setProgressCallback(percent -> publish(percent));
                     Server.setCancelFlag(cancelRequested);
-                    String serverIP = NetUtil.getLocalIPv4();
+                    //String serverIP = NetUtil.getLocalIPv4();
                     
-                    setServerIp(serverIP);
-                    Server.Start(serverIP, port, folderPath, convertYes.isSelected());
+                    //setServerIp(serverIP);
+                    Server.Start(serverIP, port, folderPath, convertYes.isSelected(), ServerConfigUI.this);
                 } 
                 catch (Exception e)
                 {
@@ -244,15 +243,13 @@ public class ServerConfigUI extends JFrame
         worker.execute();
     }
     
+    public void showErrorPane(String error_msg)
+    {
+    	JOptionPane.showMessageDialog(this, error_msg, "Invalid Folder", JOptionPane.ERROR_MESSAGE);
+    }
     
     public void setServerIp(String ip)
     {
         SwingUtilities.invokeLater(() -> serverIpField.setText(ip));
-    }
-
-    
-    public static void main(String[] args)
-    {
-        SwingUtilities.invokeLater(() -> new ServerConfigUI().setVisible(true));
     }
 }

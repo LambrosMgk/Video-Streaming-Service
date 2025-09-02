@@ -10,10 +10,10 @@ public class ProgressBarPanel
 {
     private JTextArea textArea;
     private JProgressBar progressBar;
-    private int totalVideoTimeSeconds;
+    private double totalVideoTimeSeconds;
 
     
-    public ProgressBarPanel(int totalVideoTimeSeconds)
+    public ProgressBarPanel(double totalVideoTimeSeconds)
     {
     	this.totalVideoTimeSeconds = totalVideoTimeSeconds;
     	createProgressBarPanel();

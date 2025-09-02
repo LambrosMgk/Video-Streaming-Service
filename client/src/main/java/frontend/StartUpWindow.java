@@ -3,8 +3,12 @@ package frontend;
 
 
 import javax.swing.*;
+
+import backend.Client;
+
 import java.awt.*;
 import java.awt.event.ActionListener;
+import java.io.IOException;
 
 
 public class StartUpWindow extends JFrame 
@@ -17,6 +21,45 @@ public class StartUpWindow extends JFrame
     private JButton connectButton;
     private JButton speedTestButton;
 
+    
+    
+    // Launcher
+    public static void main(String[] args)
+    {
+        SwingUtilities.invokeLater(() -> {
+            StartUpWindow win = new StartUpWindow();
+            
+            // Set ActionListeners for the buttons
+            // Action: Connect to server
+            win.setConnectAction(e -> {
+            	try
+            	{
+            		Client.Start(win.getServerIp(), win.getServerPort(), win);
+            	}
+            	catch (IOException ex) 
+                {
+                	JOptionPane.showMessageDialog(win,
+                            "Failed to connect: " + ex.getMessage(),
+                            "Connection Error",
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            });
+            
+            
+            // Action: Run speed test
+            win.setSpeedTestAction(e -> {
+            	SpeedTestWindow stw = new SpeedTestWindow(win);
+                stw.setVisible(true);
+                
+                new Thread(() -> {
+                    Client.runJSpeedTest(msg -> stw.appendMessage(msg));
+                }).start();
+            });
+            
+            
+            win.setVisible(true);
+        });
+    }
     
     public StartUpWindow()
     {
@@ -75,20 +118,30 @@ public class StartUpWindow extends JFrame
     }
 
     
+    public void showPaneError(String error_msg)
+    {
+    	JOptionPane.showMessageDialog(this, error_msg, "Error", JOptionPane.ERROR_MESSAGE);
+    }
+    
     public String getServerIp()
     {
         return serverIpField.getText().trim();
     }
 
+    
     public int getServerPort()
     {
-        try {
+        try
+        {
             return Integer.parseInt(serverPortField.getText().trim());
-        } catch (NumberFormatException e) {
+        } 
+        catch (NumberFormatException e) 
+        {
             return -1; // invalid port
         }
     }
 
+    
     public void setServerInfo(String host, int port)
     {
         serverInfoField.setText(host + ":" + port);
@@ -102,14 +155,5 @@ public class StartUpWindow extends JFrame
     public void setSpeedTestAction(ActionListener listener)
     {
         speedTestButton.addActionListener(listener);
-    }
-
-    // Quick test launcher
-    public static void main(String[] args)
-    {
-        SwingUtilities.invokeLater(() -> {
-            StartUpWindow win = new StartUpWindow();
-            win.setVisible(true);
-        });
     }
 }

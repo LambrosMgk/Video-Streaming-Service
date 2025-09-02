@@ -6,9 +6,12 @@ import java.util.*;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import javax.swing.JOptionPane;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import frontend.ServerConfigUI;
 import net.bramp.ffmpeg.FFmpeg;
 import net.bramp.ffmpeg.builder.FFmpegBuilder;
 
@@ -42,10 +45,46 @@ public class Server
     private static AtomicBoolean cancelFlag = new AtomicBoolean(false);
     
     
+    
+    
+    public static void main(String[] argv)
+    {
+    	/*if (argv.length != 3)
+    	{
+    		log.error("Program usage: server.java <serverPort> <videoFolderPath> <doConversion>");
+    		return;
+    	}*/
+    	
+    	
+    	String serverIP = "localhost";
+    	int serverPort;
+    	String videoFolderPath;
+    	boolean doConversion;
+    	Scanner cli_in = new Scanner(System.in);
+    	
+    	
+    	System.out.print("Give server port: ");
+    	serverPort = cli_in.nextInt();
+    	cli_in.nextLine();	// "eat" enter
+    	
+    	System.out.print("Give video folder path: ");
+    	videoFolderPath = cli_in.nextLine();
+    	
+    	System.out.print("Do video conversion? (yes | no) : ");
+    	doConversion = cli_in.nextLine().toLowerCase().compareTo("yes") == 0;
+    	log.info("Starting the server with: server IP:" + serverIP + ", server port:" + serverPort 
+    			+ ", video folder path: " + videoFolderPath + ", do conversion? <" + doConversion + ">");
+    	
+    	cli_in.close();
+    	//Start(serverIP, serverPort, videoFolderPath, doConversion);
+    }
+    
+    
+    
     /**
      * This function starts the server with arguments given from the GUI (instead of CLI that i used to do)
      */
-    public static void Start(String serverIP, int serverPort, String videoFolderPath, boolean doConversion)
+    public static void Start(String serverIP, int serverPort, String videoFolderPath, boolean doConversion, ServerConfigUI win)
     {
     	if(serverIP.compareTo("") != 0)
     		SERVER_IP = serverIP;
@@ -55,6 +94,14 @@ public class Server
         boolean CONVERT_AT_START = doConversion;
 
         
+        // Validate folder
+        File folder = new File(videoFolderPath);
+        if (!folder.exists() || !folder.isDirectory())
+        {
+        	win.showErrorPane("Please select a valid folder.");
+            
+            return;
+        }
         
         log.info("Starting server at " + SERVER_IP + ":" + SERVER_PORT);
         log.info("Server args: video folder=%s, convertAtStart=%s%n", VIDEO_FOLDER, CONVERT_AT_START);
